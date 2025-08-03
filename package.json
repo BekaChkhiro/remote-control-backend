@@ -9,13 +9,19 @@
     "dev": "nodemon server.js",
     "pm2": "pm2 start server.js --name remote-control"
   },
-  "keywords": ["remote", "control", "mouse", "websocket"],
+  "keywords": [
+    "remote",
+    "control",
+    "mouse",
+    "websocket"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "ws": "^8.18.3",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "dotenv": "^17.2.1",
+    "express": "^4.21.2",
+    "ws": "^8.18.3"
   },
   "optionalDependencies": {
     "robotjs": "^0.6.0"

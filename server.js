@@ -4,6 +4,10 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import os from 'os';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 // RobotJS - Optional dependency for mouse control
 let robot = null;
@@ -17,19 +21,34 @@ try {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 9090;
 const app = express();
+
+// Parse frontend origins from environment
+const getFrontendOrigins = () => {
+  const origins = [
+    'http://localhost:5173',
+    'http://localhost:5174'
+  ];
+  
+  if (process.env.FRONTEND_ORIGINS) {
+    const envOrigins = process.env.FRONTEND_ORIGINS.split(',').map(origin => origin.trim());
+    origins.push(...envOrigins);
+  }
+  
+  // Add common deployment patterns
+  origins.push(
+    /https:\/\/.*\.render\.com$/,
+    /https:\/\/.*\.vercel\.app$/,
+    /https:\/\/.*\.netlify\.app$/
+  );
+  
+  return origins;
+};
 
 // CORS configuration for cross-origin requests
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174', 
-    'https://your-frontend-domain.com', // Replace with your actual frontend domain
-    /https:\/\/.*\.render\.com$/, // Allow all render.com subdomains
-    /https:\/\/.*\.vercel\.app$/, // Allow all vercel.app subdomains
-    /https:\/\/.*\.netlify\.app$/ // Allow all netlify.app subdomains
-  ],
+  origin: getFrontendOrigins(),
   credentials: true
 }));
 
@@ -409,8 +428,8 @@ app.get('/', (req, res) => {
 // Create HTTP server
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('🚀 Remote Control Backend Server running on:');
-  console.log(\`   🖥️  Local: http://localhost:\${PORT}\`);
-  console.log(\`   📱 Network: http://\${networkIP}:\${PORT}\`);
+  console.log(`   🖥️  Local: http://localhost:${PORT}`);
+  console.log(`   📱 Network: http://${networkIP}:${PORT}`);
   console.log('');
   console.log('📱 Mobile interface available at server root URL');
   console.log('🖥️  Make sure frontend is configured to connect to this backend');
@@ -426,13 +445,13 @@ let connectedClients = 0;
 
 wss.on('connection', (ws, req) => {
   connectedClients++;
-  console.log(\`📱 Phone connected (\${connectedClients} total clients)\`);
-  console.log(\`Client IP: \${req.socket.remoteAddress}\`);
+  console.log(`📱 Phone connected (${connectedClients} total clients)`);
+  console.log(`Client IP: ${req.socket.remoteAddress}`);
   
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
-      console.log(\`Received: \${data.type}\`);
+      console.log(`Received: ${data.type}`);
       
       if (!robot) {
         console.log('⚠️ Robot control not available');
@@ -459,7 +478,7 @@ wss.on('connection', (ws, req) => {
           
         case 'scroll':
           robot.scrollMouse(data.deltaX || 0, data.deltaY || 0);
-          console.log(\`🖱️ Scroll: \${data.deltaX}, \${data.deltaY}\`);
+          console.log(`🖱️ Scroll: ${data.deltaX}, ${data.deltaY}`);
           break;
       }
     } catch (error) {
@@ -469,7 +488,7 @@ wss.on('connection', (ws, req) => {
   
   ws.on('close', () => {
     connectedClients--;
-    console.log(\`📱 Phone disconnected (\${connectedClients} remaining clients)\`);
+    console.log(`📱 Phone disconnected (${connectedClients} remaining clients)`);
   });
   
   ws.on('error', (error) => {
@@ -491,10 +510,10 @@ process.on('SIGINT', () => {
 
 // Log server info
 console.log('📋 Remote Control Backend Configuration:');
-console.log(\`   Port: \${PORT}\`);
-console.log(\`   Network IP: \${networkIP}\`);
+console.log(`   Port: ${PORT}`);
+console.log(`   Network IP: ${networkIP}`);
 if (robot) {
-  console.log(\`   Screen Size: \${robot.getScreenSize().width}x\${robot.getScreenSize().height}\`);
+  console.log(`   Screen Size: ${robot.getScreenSize().width}x${robot.getScreenSize().height}`);
   // Set mouse speed for smoother movement
   robot.setMouseDelay(2);
 } else {
