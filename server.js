@@ -544,6 +544,18 @@ wss.on('connection', (ws, req) => {
 
         // Process the command for this session
         switch (data.type) {
+          case 'setSessionId':
+            // Update session ID if provided from frontend
+            if (data.sessionId && session) {
+              const oldSessionId = session.id;
+              session.id = data.sessionId;
+              sessions.delete(ws.sessionId);
+              sessions.set(data.sessionId, session);
+              ws.sessionId = data.sessionId;
+              console.log(`[${oldSessionId}] Session ID updated to: ${data.sessionId}`);
+            }
+            break;
+            
           case 'move':
             // Use relative movement
             const screenSize = robot.getScreenSize();

@@ -276,8 +276,18 @@
             init() {
                 this.setupElements();
                 this.setupEventListeners();
+                this.getSessionIdFromUrl();
                 this.showConnectionScreen();
                 this.connect();
+            }
+
+            getSessionIdFromUrl() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const sessionIdFromUrl = urlParams.get('sessionId');
+                if (sessionIdFromUrl) {
+                    this.sessionId = sessionIdFromUrl;
+                    this.sessionInfo.textContent = `Session: ${this.sessionId}`;
+                }
             }
 
             setupElements() {
@@ -333,7 +343,14 @@
                     this.isConnected = true;
                     this.connectionAttempts = 0;
                     this.updateConnectionStatus('Connected', true);
-                    this.generateSessionId();
+                    
+                    // Send session ID to server if we have one from URL
+                    if (this.sessionId && this.sessionId.startsWith('session_')) {
+                        this.sendMessage({ type: 'setSessionId', sessionId: this.sessionId });
+                    } else {
+                        this.generateSessionId();
+                    }
+                    
                     this.hideConnectionScreen();
                 };
 
