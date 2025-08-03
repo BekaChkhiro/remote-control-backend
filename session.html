@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>📱 Remote Control Session</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f44336;
+            transition: background-color 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background: #4CAF50;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-dot.connecting {
+            background: #FFC107;
+            animation: blink 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .session-info {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .disconnect-section {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .disconnect-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(244, 67, 54, 0.3);
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(244, 67, 54, 0.5);
+        }
+
+        .disconnect-btn:active {
+            background: rgba(244, 67, 54, 0.5);
+            transform: scale(0.95);
+        }
+
+        .trackpad {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 500;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .trackpad.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .controls {
+            padding: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .control-button {
+            flex: 1;
+            max-width: 120px;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-button:active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.95);
+        }
+
+        .instructions {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            font-size: 14px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(244, 67, 54, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 300px;
+            backdrop-filter: blur(10px);
+            display: none;
+        }
+
+        .connection-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+        }
+
+        .connection-screen.hidden {
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-screen" id="connectionScreen">
+        <div class="loading-spinner"></div>
+        <h2>დაკავშირება...</h2>
+        <p style="margin-top: 10px; opacity: 0.8;">Remote Control Server-თან კავშირი</p>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>📱 Remote Session</h1>
+            <div class="connection-status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+            <div class="session-info" id="sessionInfo">
+                Session: Initializing...
+            </div>
+        </div>
+
+        <div class="disconnect-section">
+            <button class="disconnect-btn" id="disconnectBtn">🔌 კავშირის გაწყვეტა</button>
+        </div>
+
+        <div class="instructions">
+            Move finger to control cursor • Tap to click • Long press for right click
+        </div>
+
+        <div class="trackpad" id="trackpad">
+            <div>Trackpad Area</div>
+        </div>
+
+        <div class="controls">
+            <button class="control-button" id="leftClick">Left Click</button>
+            <button class="control-button" id="rightClick">Right Click</button>
+        </div>
+    </div>
+
+    <div class="error-message" id="errorMessage">
+        <h3>Connection Error</h3>
+        <p>Could not connect to server. Make sure the remote control server is running.</p>
+    </div>
+
+    <script>
+        class RemoteSession {
+            constructor() {
+                this.ws = null;
+                this.isConnected = false;
+                this.lastTouch = { x: 0, y: 0 };
+                this.longPressTimer = null;
+                this.longPressDelay = 500;
+                this.sessionId = null;
+                this.connectionAttempts = 0;
+                this.maxConnectionAttempts = 5;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupElements();
+                this.setupEventListeners();
+                this.showConnectionScreen();
+                this.connect();
+            }
+
+            setupElements() {
+                this.trackpad = document.getElementById('trackpad');
+                this.statusDot = document.getElementById('statusDot');
+                this.statusText = document.getElementById('statusText');
+                this.sessionInfo = document.getElementById('sessionInfo');
+                this.errorMessage = document.getElementById('errorMessage');
+                this.leftClickBtn = document.getElementById('leftClick');
+                this.rightClickBtn = document.getElementById('rightClick');
+                this.disconnectBtn = document.getElementById('disconnectBtn');
+                this.connectionScreen = document.getElementById('connectionScreen');
+            }
+
+            setupEventListeners() {
+                // Button events
+                this.leftClickBtn.addEventListener('click', () => this.sendMessage({ type: 'click' }));
+                this.rightClickBtn.addEventListener('click', () => this.sendMessage({ type: 'rightClick' }));
+                this.disconnectBtn.addEventListener('click', () => this.disconnect());
+
+                // Trackpad touch events
+                this.trackpad.addEventListener('touchstart', this.handleTouchStart.bind(this));
+                this.trackpad.addEventListener('touchmove', this.handleTouchMove.bind(this));
+                this.trackpad.addEventListener('touchend', this.handleTouchEnd.bind(this));
+
+                // Prevent default touch behaviors only on trackpad
+                this.trackpad.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+            }
+
+            showConnectionScreen() {
+                this.connectionScreen.classList.remove('hidden');
+            }
+
+            hideConnectionScreen() {
+                this.connectionScreen.classList.add('hidden');
+            }
+
+            connect() {
+                this.connectionAttempts++;
+                
+                if (this.connectionAttempts > this.maxConnectionAttempts) {
+                    this.hideConnectionScreen();
+                    this.showError('Max connection attempts reached');
+                    return;
+                }
+
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                this.ws = new WebSocket(wsUrl);
+
+                this.ws.onopen = () => {
+                    this.isConnected = true;
+                    this.connectionAttempts = 0;
+                    this.updateConnectionStatus('Connected', true);
+                    this.generateSessionId();
+                    this.hideConnectionScreen();
+                };
+
+                this.ws.onclose = () => {
+                    this.isConnected = false;
+                    this.updateConnectionStatus('Disconnected', false);
+                    this.sessionInfo.textContent = 'Session: Disconnected';
+                    
+                    if (this.connectionAttempts < this.maxConnectionAttempts) {
+                        this.showConnectionScreen();
+                        setTimeout(() => this.connect(), 3000);
+                    }
+                };
+
+                this.ws.onerror = () => {
+                    this.showError('Connection failed');
+                };
+            }
+
+            disconnect() {
+                if (confirm('გსურთ კავშირის გაწყვეტა?')) {
+                    if (this.ws) {
+                        this.ws.close();
+                    }
+                    this.isConnected = false;
+                    this.updateConnectionStatus('Disconnected', false);
+                    this.sessionInfo.textContent = 'Session: Manually Disconnected';
+                    this.connectionAttempts = this.maxConnectionAttempts; // Prevent reconnection
+                }
+            }
+
+            generateSessionId() {
+                this.sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                this.sessionInfo.textContent = `Session: ${this.sessionId}`;
+            }
+
+            updateConnectionStatus(text, connected) {
+                this.statusText.textContent = text;
+                this.statusDot.classList.remove('connected', 'connecting');
+                
+                if (connected) {
+                    this.statusDot.classList.add('connected');
+                } else if (this.connectionAttempts > 0 && this.connectionAttempts < this.maxConnectionAttempts) {
+                    this.statusDot.classList.add('connecting');
+                    this.statusText.textContent = `Reconnecting... (${this.connectionAttempts}/${this.maxConnectionAttempts})`;
+                }
+            }
+
+            showError(message) {
+                this.errorMessage.querySelector('p').textContent = message;
+                this.errorMessage.style.display = 'block';
+                setTimeout(() => {
+                    this.errorMessage.style.display = 'none';
+                }, 5000);
+            }
+
+            handleTouchStart(e) {
+                e.preventDefault();
+                if (!this.isConnected) return;
+                
+                this.trackpad.classList.add('active');
+
+                const touch = e.touches[0];
+                this.lastTouch = {
+                    x: touch.clientX,
+                    y: touch.clientY
+                };
+
+                this.longPressTimer = setTimeout(() => {
+                    this.sendMessage({ type: 'rightClick' });
+                    navigator.vibrate && navigator.vibrate(50);
+                }, this.longPressDelay);
+            }
+
+            handleTouchMove(e) {
+                e.preventDefault();
+                if (!this.isConnected) return;
+
+                const touch = e.touches[0];
+                const deltaX = (touch.clientX - this.lastTouch.x) * 2;
+                const deltaY = (touch.clientY - this.lastTouch.y) * 2;
+
+                if (this.longPressTimer) {
+                    clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
+                }
+
+                this.sendMessage({
+                    type: 'move',
+                    deltaX: deltaX,
+                    deltaY: deltaY
+                });
+
+                this.lastTouch = {
+                    x: touch.clientX,
+                    y: touch.clientY
+                };
+            }
+
+            handleTouchEnd(e) {
+                e.preventDefault();
+                if (!this.isConnected) return;
+                
+                this.trackpad.classList.remove('active');
+
+                if (this.longPressTimer) {
+                    clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
+                    this.sendMessage({ type: 'click' });
+                    navigator.vibrate && navigator.vibrate(30);
+                }
+            }
+
+            sendMessage(data) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify(data));
+                }
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new RemoteSession();
+        });
+
+        // Prevent zoom and other touch behaviors
+        document.addEventListener('gesturestart', e => e.preventDefault());
+        document.addEventListener('gesturechange', e => e.preventDefault());
+        document.addEventListener('gestureend', e => e.preventDefault());
+    </script>
+</body>
+</html>

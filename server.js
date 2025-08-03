@@ -85,8 +85,31 @@ app.get('/api/server-info', (req, res) => {
     networkIP: networkIP,
     port: PORT,
     robotjs: !!robot,
-    screenSize: robot ? robot.getScreenSize() : null
+    screenSize: robot ? robot.getScreenSize() : null,
+    activeSessions: sessions.size,
+    totalConnections: connectedClients
   });
+});
+
+// Get active sessions endpoint
+app.get('/api/sessions', (req, res) => {
+  const sessionList = Array.from(sessions.values()).map(session => ({
+    id: session.id,
+    ip: session.ip,
+    connectedAt: session.connectedAt,
+    lastActivity: session.lastActivity,
+    duration: Math.round((Date.now() - session.connectedAt) / 1000)
+  }));
+  
+  res.json({
+    totalSessions: sessions.size,
+    sessions: sessionList
+  });
+});
+
+// Serve the session page
+app.get('/session.html', (req, res) => {
+  res.sendFile(join(__dirname, 'session.html'));
 });
 
 // Serve the mobile control interface
@@ -242,6 +265,9 @@ app.get('/', (req, res) => {
                     <div class="status-dot" id="statusDot"></div>
                     <span id="statusText">Connecting...</span>
                 </div>
+                <div class="session-info" id="sessionInfo" style="font-size: 12px; opacity: 0.7; margin-top: 5px;">
+                    Session: Initializing...
+                </div>
             </div>
 
             <div class="instructions">
@@ -285,9 +311,11 @@ app.get('/', (req, res) => {
                     this.trackpad = document.getElementById('trackpad');
                     this.statusDot = document.getElementById('statusDot');
                     this.statusText = document.getElementById('statusText');
+                    this.sessionInfo = document.getElementById('sessionInfo');
                     this.errorMessage = document.getElementById('errorMessage');
                     this.leftClickBtn = document.getElementById('leftClick');
                     this.rightClickBtn = document.getElementById('rightClick');
+                    this.sessionId = null;
                 }
 
                 setupEventListeners() {
@@ -339,17 +367,25 @@ app.get('/', (req, res) => {
                     this.ws.onopen = () => {
                         this.isConnected = true;
                         this.updateConnectionStatus('Connected', true);
+                        this.generateSessionId();
                     };
 
                     this.ws.onclose = () => {
                         this.isConnected = false;
                         this.updateConnectionStatus('Disconnected', false);
+                        this.sessionInfo.textContent = 'Session: Disconnected';
                         setTimeout(() => this.connect(), 3000);
                     };
 
                     this.ws.onerror = () => {
                         this.showError();
                     };
+                }
+
+                generateSessionId() {
+                    // Generate a simple client-side session identifier
+                    this.sessionId = 'client_' + Math.random().toString(36).substr(2, 9);
+                    this.sessionInfo.textContent = \`Session: \${this.sessionId}\`;
                 }
 
                 updateConnectionStatus(text, connected) {
@@ -433,6 +469,37 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('🖥️  Make sure frontend is configured to connect to this backend');
 });
 
+// Session management
+const sessions = new Map();
+let sessionIdCounter = 0;
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+function generateSessionId() {
+  return `session_${++sessionIdCounter}_${Date.now()}`;
+}
+
+// Clean up inactive sessions every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  for (const [sessionId, session] of sessions) {
+    const inactiveTime = now - session.lastActivity.getTime();
+    if (inactiveTime > SESSION_TIMEOUT) {
+      console.log(`🧹 Cleaning up inactive session: ${sessionId} (inactive for ${Math.round(inactiveTime / 1000)}s)`);
+      if (session.ws && session.ws.readyState === 1) {
+        session.ws.close();
+      }
+      sessions.delete(sessionId);
+      cleanedCount++;
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`🧹 Cleaned up ${cleanedCount} inactive sessions. Active sessions: ${sessions.size}`);
+  }
+}, 5 * 60 * 1000);
+
 // Create WebSocket server
 const wss = new WebSocketServer({ 
   server,
@@ -443,46 +510,67 @@ let connectedClients = 0;
 
 wss.on('connection', (ws, req) => {
   connectedClients++;
-  console.log(`📱 Phone connected (${connectedClients} total clients)`);
-  console.log(`Client IP: ${req.socket.remoteAddress}`);
+  
+  // Create new session for this client
+  const sessionId = generateSessionId();
+  const clientSession = {
+    id: sessionId,
+    ws: ws,
+    ip: req.socket.remoteAddress,
+    connectedAt: new Date(),
+    lastActivity: new Date()
+  };
+  
+  sessions.set(sessionId, clientSession);
+  ws.sessionId = sessionId;
+  
+  console.log(`📱 New session started: ${sessionId}`);
+  console.log(`   Client IP: ${req.socket.remoteAddress}`);
+  console.log(`   Total sessions: ${sessions.size}`);
   
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
-      console.log(`Received: ${data.type}`, data);
+      const session = sessions.get(ws.sessionId);
       
-      if (!robot) {
-        console.log('⚠️ Robot control not available');
-        return;
-      }
+      if (session) {
+        session.lastActivity = new Date();
+        console.log(`[${session.id}] Received: ${data.type}`);
+        
+        if (!robot) {
+          console.log('⚠️ Robot control not available');
+          return;
+        }
 
-      switch (data.type) {
-        case 'move':
-          // Use relative movement
-          const screenSize = robot.getScreenSize();
-          const currentPos = robot.getMousePos();
-          
-          // deltaX, deltaY are already in pixels from mobile
-          const newX = Math.max(0, Math.min(screenSize.width - 1, currentPos.x + data.deltaX));
-          const newY = Math.max(0, Math.min(screenSize.height - 1, currentPos.y + data.deltaY));
-          
-          robot.moveMouse(newX, newY);
-          break;
-          
-        case 'click':
-          robot.mouseClick();
-          console.log('🖱️ Left click');
-          break;
-          
-        case 'rightClick':
-          robot.mouseClick('right');
-          console.log('🖱️ Right click');
-          break;
-          
-        case 'scroll':
-          robot.scrollMouse(data.deltaX || 0, data.deltaY || 0);
-          console.log(`🖱️ Scroll: ${data.deltaX}, ${data.deltaY}`);
-          break;
+        // Process the command for this session
+        switch (data.type) {
+          case 'move':
+            // Use relative movement
+            const screenSize = robot.getScreenSize();
+            const currentPos = robot.getMousePos();
+            
+            // deltaX, deltaY are already in pixels from mobile
+            const newX = Math.max(0, Math.min(screenSize.width - 1, currentPos.x + data.deltaX));
+            const newY = Math.max(0, Math.min(screenSize.height - 1, currentPos.y + data.deltaY));
+            
+            robot.moveMouse(newX, newY);
+            break;
+            
+          case 'click':
+            robot.mouseClick();
+            console.log(`[${session.id}] 🖱️ Left click`);
+            break;
+            
+          case 'rightClick':
+            robot.mouseClick('right');
+            console.log(`[${session.id}] 🖱️ Right click`);
+            break;
+            
+          case 'scroll':
+            robot.scrollMouse(data.deltaX || 0, data.deltaY || 0);
+            console.log(`[${session.id}] 🖱️ Scroll: ${data.deltaX}, ${data.deltaY}`);
+            break;
+        }
       }
     } catch (error) {
       console.error('Error processing message:', error);
@@ -491,11 +579,21 @@ wss.on('connection', (ws, req) => {
   
   ws.on('close', () => {
     connectedClients--;
-    console.log(`📱 Phone disconnected (${connectedClients} remaining clients)`);
+    const session = sessions.get(ws.sessionId);
+    if (session) {
+      console.log(`📱 Session ended: ${session.id}`);
+      console.log(`   Duration: ${Math.round((Date.now() - session.connectedAt) / 1000)}s`);
+      sessions.delete(ws.sessionId);
+    }
+    console.log(`   Remaining sessions: ${sessions.size}`);
   });
   
   ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
+    console.error(`WebSocket error [${ws.sessionId}]:`, error);
+    // Clean up session on error
+    if (ws.sessionId && sessions.has(ws.sessionId)) {
+      sessions.delete(ws.sessionId);
+    }
   });
 });
 
