@@ -365,8 +365,8 @@ app.get('/', (req, res) => {
                     if (!this.isConnected) return;
 
                     const touch = e.touches[0];
-                    const deltaX = (touch.clientX - this.lastTouch.x) / window.innerWidth;
-                    const deltaY = (touch.clientY - this.lastTouch.y) / window.innerHeight;
+                    const deltaX = (touch.clientX - this.lastTouch.x);
+                    const deltaY = (touch.clientY - this.lastTouch.y);
 
                     // Clear long press timer on move
                     if (this.longPressTimer) {
@@ -374,12 +374,11 @@ app.get('/', (req, res) => {
                         this.longPressTimer = null;
                     }
 
+                    // Send relative movement (not absolute position)
                     this.sendMessage({
                         type: 'move',
-                        x: touch.clientX / window.innerWidth,
-                        y: touch.clientY / window.innerHeight,
-                        deltaX: deltaX * 5,
-                        deltaY: deltaY * 5
+                        deltaX: deltaX * 2, // Sensitivity multiplier
+                        deltaY: deltaY * 2
                     });
 
                     this.lastTouch = {
@@ -451,7 +450,7 @@ wss.on('connection', (ws, req) => {
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
-      console.log(`Received: ${data.type}`);
+      console.log(`Received: ${data.type}`, data);
       
       if (!robot) {
         console.log('⚠️ Robot control not available');
@@ -460,10 +459,15 @@ wss.on('connection', (ws, req) => {
 
       switch (data.type) {
         case 'move':
+          // Use relative movement
           const screenSize = robot.getScreenSize();
-          const x = Math.round(data.x * screenSize.width);
-          const y = Math.round(data.y * screenSize.height);
-          robot.moveMouse(x, y);
+          const currentPos = robot.getMousePos();
+          
+          // deltaX, deltaY are already in pixels from mobile
+          const newX = Math.max(0, Math.min(screenSize.width - 1, currentPos.x + data.deltaX));
+          const newY = Math.max(0, Math.min(screenSize.height - 1, currentPos.y + data.deltaY));
+          
+          robot.moveMouse(newX, newY);
           break;
           
         case 'click':
