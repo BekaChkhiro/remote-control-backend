@@ -96,7 +96,7 @@ app.get('/', (req, res) => {
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
         <title>📱 Phone Mouse Control</title>
         <style>
             * {
@@ -291,18 +291,43 @@ app.get('/', (req, res) => {
                 }
 
                 setupEventListeners() {
+                    // Button events
+                    this.leftClickBtn.addEventListener('click', () => this.sendMessage({ type: 'click' }));
+                    this.rightClickBtn.addEventListener('click', () => this.sendMessage({ type: 'rightClick' }));
+
                     // Trackpad touch events
                     this.trackpad.addEventListener('touchstart', this.handleTouchStart.bind(this));
                     this.trackpad.addEventListener('touchmove', this.handleTouchMove.bind(this));
                     this.trackpad.addEventListener('touchend', this.handleTouchEnd.bind(this));
 
-                    // Button events
-                    this.leftClickBtn.addEventListener('click', () => this.sendMessage({ type: 'click' }));
-                    this.rightClickBtn.addEventListener('click', () => this.sendMessage({ type: 'rightClick' }));
+                    // Prevent default touch behaviors only on trackpad
+                    this.trackpad.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+                }
 
-                    // Prevent default touch behaviors
-                    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-                    document.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+                handleTouchMove(e) {
+                    e.preventDefault();
+                    if (!this.isConnected) return;
+
+                    const touch = e.touches[0];
+                    const deltaX = (touch.clientX - this.lastTouch.x) * 2;
+                    const deltaY = (touch.clientY - this.lastTouch.y) * 2;
+
+                    // Clear long press timer on move
+                    if (this.longPressTimer) {
+                        clearTimeout(this.longPressTimer);
+                        this.longPressTimer = null;
+                    }
+
+                    this.sendMessage({
+                        type: 'move',
+                        deltaX: deltaX,
+                        deltaY: deltaY
+                    });
+
+                    this.lastTouch = {
+                        x: touch.clientX,
+                        y: touch.clientY
+                    };
                 }
 
                 connect() {
@@ -345,46 +370,20 @@ app.get('/', (req, res) => {
 
                 handleTouchStart(e) {
                     e.preventDefault();
+                    this.trackpad.classList.add('active');
+
+                    // Initialize touch position for touch control
                     const touch = e.touches[0];
                     this.lastTouch = {
                         x: touch.clientX,
                         y: touch.clientY
                     };
-
-                    this.trackpad.classList.add('active');
 
                     // Start long press timer for right click
                     this.longPressTimer = setTimeout(() => {
                         this.sendMessage({ type: 'rightClick' });
                         navigator.vibrate && navigator.vibrate(50);
                     }, this.longPressDelay);
-                }
-
-                handleTouchMove(e) {
-                    e.preventDefault();
-                    if (!this.isConnected) return;
-
-                    const touch = e.touches[0];
-                    const deltaX = (touch.clientX - this.lastTouch.x);
-                    const deltaY = (touch.clientY - this.lastTouch.y);
-
-                    // Clear long press timer on move
-                    if (this.longPressTimer) {
-                        clearTimeout(this.longPressTimer);
-                        this.longPressTimer = null;
-                    }
-
-                    // Send relative movement (not absolute position)
-                    this.sendMessage({
-                        type: 'move',
-                        deltaX: deltaX * 2, // Sensitivity multiplier
-                        deltaY: deltaY * 2
-                    });
-
-                    this.lastTouch = {
-                        x: touch.clientX,
-                        y: touch.clientY
-                    };
                 }
 
                 handleTouchEnd(e) {
